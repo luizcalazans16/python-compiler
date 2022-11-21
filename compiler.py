@@ -1,14 +1,15 @@
 import ply.yacc as yacc
 import ply.lex as lex
 import random
+import yaml
 
 reserved = {
     'if': 'IF',
-    'ifelse': 'IFELSE',
+    'else': 'ELSE',
     'while': 'WHILE',
     'true': 'TRUE',
     'false': 'FALSE',
-    'var': 'VAR',
+    'make': 'MAKE',
     'print': 'PRINT',
     'to': 'TO',
     'end': 'END',
@@ -34,7 +35,8 @@ reserved = {
     'random': 'RANDOM',
     'xcor': 'XCOR',
     'ycor': 'YCOR',
-    'typein': 'TYPEIN'
+    'typein': 'TYPEIN',
+    'sqrt': 'SQRT'
 }
 
 tokens = [
@@ -42,7 +44,7 @@ tokens = [
     'LBR', 'RBR', 'LPAR', 'RPAR',
     'QUOTE', 'COLON', 'COMMA',
     'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'POWER',
-    'EQUALS', 'GTE', 'LTE', 'GT', 'LT', 'NE'
+    'EQUALS', 'GTE', 'LTE', 'GT', 'LT', 'NE', 'RECEIVE'
 ] + list(set(reserved.values()))
 
 
@@ -60,7 +62,8 @@ t_MINUS = r'-'
 t_TIMES = r'\*'
 t_DIVIDE = r'/'
 t_POWER = r'\^'
-t_EQUALS = r'='
+t_EQUALS = r'=='
+t_RECEIVE = r'='
 t_GTE = r'>='
 t_LTE = r'<='
 t_GT = r'>'
@@ -100,12 +103,12 @@ def t_error(t):
 
 precedence = (
     ('right', 'RANDOM'),
+    ('right', 'SQRT'),
     ('left', 'PLUS', 'MINUS'),
     ('left', 'TIMES', 'DIVIDE'),
     ('right', 'UMINUS'),
     ('left', 'POWER'),
 )
-
 
 def p_statement_list(p):
     '''
@@ -122,7 +125,6 @@ def p_statement(p):
     '''
     statement : turtle_instruction
               | if_statement
-              | ifelse_statement
               | while_statement
               | variable_declaration
               | procedure_definition
@@ -161,15 +163,12 @@ def p_turtle_instruction(p):
 def p_if_statement(p):
     '''
     if_statement : IF condition LBR statement_list RBR
+                 | IF condition LBR statement_list RBR ELSE LBR statement_list RBR
     '''
-    p[0] = (reserved[p[1]], p[2], p[4])
-
-
-def p_ifelse_statement(p):
-    '''
-    ifelse_statement : IFELSE condition LBR statement_list RBR LBR statement_list RBR
-    '''
-    p[0] = (reserved[p[1]], p[2], p[4], p[7])
+    if len(p) == 6:
+        p[0] = (reserved[p[1]], p[2], p[4])
+    else:
+        p[0] = (reserved[p[1]], p[2], p[4], reserved[p[6]], p[8])
 
 
 def p_while_statement(p):
@@ -181,17 +180,22 @@ def p_while_statement(p):
 
 def p_variable_declaration(p):
     '''
-    variable_declaration : VAR word expression
+    variable_declaration : MAKE STRING RECEIVE expression
     '''
-    p[0] = (reserved[p[1]], p[2], p[3])
+    p[0] = (reserved[p[1]], p[2], p[3], p[4])
+    symbol_table[p[2]] = calc(p[4])
 
 
 def p_procedure_definition(p):
     '''
-    procedure_definition : TO STRING LBR parameter_list RBR statement_list END
+    procedure_definition : TO STRING LBR parameter_list RBR LBR statement_list RBR END
     '''
     args = [a for a in p[4] if a is not None]
-    p[0] = ('DEF', p[2], args, p[6])
+    p[0] = ('DEF', p[2], args, p[7])
+    symbol_table[p[2]] = {
+        'args': [a for a in args if a is not None],
+        'body': p[7]
+    }
 
 
 def p_parameter_list(p):
@@ -255,35 +259,7 @@ def p_expression_int_float(p):
     p[0] = p[1]
 
 
-def p_expression_var(p):
-    '''
-    expression : name
-    '''
-    p[0] = ('VAR', p[1])
-
-
-def p_expression_group(p):
-    '''
-    expression : LPAR expression RPAR
-    '''
-    p[0] = p[2]
-
-
-def p_expression_uminus(p):
-    '''
-    expression : MINUS expression %prec UMINUS
-    '''
-    p[0] = ('UMINUS', p[2])
-
-
-def p_expression_random(p):
-    '''
-    expression : RANDOM expression
-    '''
-    p[0] = (reserved[p[1]], p[2])
-
-
-def p_expression(p):
+def p_expression_binary(p):
     '''
     expression : expression TIMES expression
                | expression DIVIDE expression
@@ -294,29 +270,50 @@ def p_expression(p):
     p[0] = (p[2], p[1], p[3])
 
 
-def p_condition_true_false(p):
+def p_expression_math(p):
     '''
-    condition : TRUE
-              | FALSE
+    expression : SQRT LBR expression RBR
     '''
-    p[0] = (p[1] == 'true')
+    p[0] = ('SQRT', p[3])
+
+
+def p_expression_others(p):
+    '''
+    expression : name
+               | LPAR expression RPAR
+               | MINUS expression %prec UMINUS
+               | RANDOM expression
+    '''
+    if len(p) == 5:
+        p[0] = ('UMINUS', p[2])
+    if len(p) == 4:
+        p[0] = p[2]
+    if len(p) == 3:
+        p[0] = (reserved[p[1]], p[2])
+    else:
+        p[0] = ('VAR', p[1])
 
 
 def p_condition(p):
     '''
-    condition : expression GT expression
+    condition : TRUE
+              | FALSE
+              | expression GT expression
               | expression LT expression
               | expression GTE expression
               | expression LTE expression
               | expression EQUALS expression
               | expression NE expression
     '''
-    p[0] = (p[2], p[1], p[3])
+    if len(p) == 2:
+        p[0] = (p[1] == 'true')
+    else:
+        p[0] = (p[2], p[1], p[3])
 
 
 def p_word(p):
     '''
-    word : QUOTE STRING
+    word : QUOTE STRING QUOTE
     '''
     p[0] = p[2]
 
@@ -343,7 +340,6 @@ def p_error(p):
         print("Syntax error at EOF")
 
 
-# Interpretador
 symbol_table = {}
 
 
@@ -394,18 +390,20 @@ def execute(s):
     elif function == 'IF':
         if eval(arg1):
             run(arg2)
+
     elif function == 'IFELSE':
         if eval(arg1):
             run(arg2)
         else:
             run(arg3)
+
     elif function == 'WHILE':
         while eval(arg1):
             run(arg2)
-    # Declaração de variáveis
-    elif function == 'VAR':
-        symbol_table[arg1] = calc(arg2)
-    # Declaração de funções
+
+    elif function == 'MAKE':
+        symbol_table[arg1] = calc(arg3)
+
     elif function == 'DEF':
         symbol_table[arg1] = {
             'args': [a for a in arg2 if a is not None],
@@ -499,6 +497,7 @@ def main():
                 break
         except EOFError:
             break
+
         lines = [cmd]
         while True:
             line = input(f'input > ')
@@ -513,17 +512,12 @@ def main():
         if p is None:
             pass
         else:
-            try:
-                print('AST             : ', p)
-                # run(p)
-            except Exception as e:
-                print(f'Erro no interpretador do Python: {e}')
-                lexer.input(s)
-                tokens = [(tok.type, tok.value) for tok in lexer]
-                print('tokens          : ', tokens)
-                print('AST             : ', p)
-                print('Symbol table    : ', symbol_table)
-                continue
+            #lexer.input(s)
+            #tokens = [(tok.type, tok.value) for tok in lexer]
+            #print('tokens          : ', tokens)
+            print('AST             : ', p)
+            #print('Symbol table    : ', symbol_table)
+            continue
 
 
 if __name__ == '__main__':
