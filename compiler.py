@@ -1,7 +1,5 @@
 import ply.yacc as yacc
 import ply.lex as lex
-import random
-import yaml
 
 reserved = {
     'if': 'IF',
@@ -9,7 +7,6 @@ reserved = {
     'while': 'WHILE',
     'true': 'TRUE',
     'false': 'FALSE',
-    'make': 'MAKE',
     'print': 'PRINT',
     'to': 'TO',
     'end': 'END',
@@ -36,25 +33,26 @@ reserved = {
     'xcor': 'XCOR',
     'ycor': 'YCOR',
     'typein': 'TYPEIN',
-    'sqrt': 'SQRT'
+    'sqrt': 'SQRT',
+    'and': 'AND',
+    'or': 'OR',
+    'not': 'NOT',
+    'then': 'THEN'
 }
 
 tokens = [
-    'STRING', 'FLOAT', 'INT',
-    'LBR', 'RBR', 'LPAR', 'RPAR',
-    'QUOTE', 'COLON', 'COMMA',
-    'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'POWER',
-    'EQUALS', 'GTE', 'LTE', 'GT', 'LT', 'NE', 'RECEIVE'
+    'ID', 'FLOAT', 'INT', 'STRING',
+    'LPAR', 'RPAR', 'LK', 'RK',
+    'COLON', 'COMMA',
+    'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'POWER', 'ASSIGN',
+    'EQ', 'GTE', 'LTE', 'GT', 'LT', 'NE'
 ] + list(set(reserved.values()))
 
 
-# Tokens
-
-t_LBR = r'\['
-t_RBR = r'\]'
 t_LPAR = r'\('
+t_LK = r'{'
+t_RK = r'}'
 t_RPAR = r'\)'
-t_QUOTE = r'"'
 t_COLON = r':'
 t_COMMA = r','
 t_PLUS = r'\+'
@@ -62,37 +60,45 @@ t_MINUS = r'-'
 t_TIMES = r'\*'
 t_DIVIDE = r'/'
 t_POWER = r'\^'
-t_EQUALS = r'=='
-t_RECEIVE = r'='
+t_EQ = r'=='
+t_ASSIGN = r'='
 t_GTE = r'>='
 t_LTE = r'<='
 t_GT = r'>'
 t_LT = r'<'
 t_NE = r'!='
 
+
 @lex.TOKEN(r'[a-zA-Z_][a-zA-Z0-9_]*')
+def t_ID(t):
+    t.type = reserved.get(t.value, 'ID')
+    return t
+
+
+@lex.TOKEN(r'\".*\"')
 def t_STRING(t):
-    #r'[a-zA-Z_][a-zA-Z0-9_]*'
     t.type = reserved.get(t.value, 'STRING')
     return t
 
+
 @lex.TOKEN(r'\d*\.\d+')
 def t_FLOAT(t):
-    #r'\d*\.\d+'
+    r'\d*\.\d+'
     t.value = float(t.value)
     return t
 
+
 @lex.TOKEN(r'\d+')
 def t_INT(t):
-    #r'\d+'
     t.value = int(t.value)
     return t
 
+
 t_ignore = " \t"
+
 
 @lex.TOKEN(r'\n+')
 def t_newline(t):
-    #r'\n+'
     t.lexer.lineno += len(t.value)
 
 
@@ -100,6 +106,8 @@ def t_error(t):
     print(f"Illegal character '%s'" % t.value[0])
     t.lexer.skip(1)
 
+
+# Precedência do Parser
 
 precedence = (
     ('right', 'RANDOM'),
@@ -109,6 +117,9 @@ precedence = (
     ('right', 'UMINUS'),
     ('left', 'POWER'),
 )
+
+# Gramática
+
 
 def p_statement_list(p):
     '''
@@ -136,7 +147,7 @@ def p_statement(p):
 
 def p_turtle_instruction(p):
     '''
-    turtle_instruction : SETXY LBR expression COMMA expression RBR
+    turtle_instruction : SETXY LK expression COMMA expression RK
                        | FORWARD expression
                        | BACKWARD expression
                        | RIGHT expression
@@ -162,39 +173,39 @@ def p_turtle_instruction(p):
 
 def p_if_statement(p):
     '''
-    if_statement : IF condition LBR statement_list RBR
-                 | IF condition LBR statement_list RBR ELSE LBR statement_list RBR
+    if_statement : IF LPAR condition RPAR THEN statement_list END
+                 | IF LPAR condition RPAR THEN statement_list ELSE statement_list END
     '''
-    if len(p) == 6:
-        p[0] = (reserved[p[1]], p[2], p[4])
+    if len(p) == 8:
+        p[0] = (reserved[p[1]], p[3], p[6])
     else:
-        p[0] = (reserved[p[1]], p[2], p[4], reserved[p[6]], p[8])
+        p[0] = (reserved[p[1]], p[3], p[6], reserved[p[7]], p[8])
 
 
 def p_while_statement(p):
     '''
-    while_statement : WHILE condition LBR statement_list RBR
+    while_statement : WHILE LPAR condition RPAR statement_list END
     '''
-    p[0] = (reserved[p[1]], p[2], p[4])
+    p[0] = (reserved[p[1]], p[3], p[5])
 
 
 def p_variable_declaration(p):
     '''
-    variable_declaration : MAKE STRING RECEIVE expression
+    variable_declaration : ID ASSIGN expression
     '''
-    p[0] = (reserved[p[1]], p[2], p[3], p[4])
-    symbol_table[p[2]] = calc(p[4])
+    p[0] = ('VAR', p[1], p[3])
+    symbol_table[p[1]] = p[3]
 
 
 def p_procedure_definition(p):
     '''
-    procedure_definition : TO STRING LBR parameter_list RBR LBR statement_list RBR END
+    procedure_definition : TO ID parameter_list statement_list END
     '''
-    args = [a for a in p[4] if a is not None]
-    p[0] = ('DEF', p[2], args, p[7])
+    args = [a for a in p[3] if a is not None]
+    p[0] = ('DEF', p[2], args, p[4])
     symbol_table[p[2]] = {
         'args': [a for a in args if a is not None],
-        'body': p[7]
+        'body': p[4]
     }
 
 
@@ -219,9 +230,9 @@ def p_parameter(p):
 
 def p_procedure_call(p):
     '''
-    procedure_call : STRING LBR expression_list RBR
+    procedure_call : ID expression_list
     '''
-    args = [a for a in p[3] if a is not None]
+    args = [a for a in p[2] if a is not None]
     p[0] = ('CALL', p[1], args)
 
 
@@ -237,18 +248,12 @@ def p_expression_list(p):
         p[0] = [p[1]]
 
 
-def p_print_statement_word(p):
+def p_print_statement(p):
     '''
     print_statement : PRINT word
+                    | PRINT expression
     '''
-    p[0] = ('PRINT_WORD', p[2])
-
-
-def p_print_statement_expression(p):
-    '''
-    print_statement : PRINT expression
-    '''
-    p[0] = ('PRINT_EXPR', p[2])
+    p[0] = (reserved[p[1]], p[2])
 
 
 def p_expression_int_float(p):
@@ -272,16 +277,15 @@ def p_expression_binary(p):
 
 def p_expression_math(p):
     '''
-    expression : SQRT LBR expression RBR
+    expression : SQRT expression
     '''
-    p[0] = ('SQRT', p[3])
+    p[0] = ('SQRT', p[2])
 
 
 def p_expression_others(p):
     '''
-    expression : name
+    expression : MINUS expression %prec UMINUS
                | LPAR expression RPAR
-               | MINUS expression %prec UMINUS
                | RANDOM expression
     '''
     if len(p) == 5:
@@ -290,37 +294,60 @@ def p_expression_others(p):
         p[0] = p[2]
     if len(p) == 3:
         p[0] = (reserved[p[1]], p[2])
-    else:
-        p[0] = ('VAR', p[1])
+
+
+def p_expression_name(p):
+    '''
+    expression : name
+    '''
+    p[0] = ('VAR', p[1])
 
 
 def p_condition(p):
     '''
-    condition : TRUE
-              | FALSE
-              | expression GT expression
-              | expression LT expression
-              | expression GTE expression
-              | expression LTE expression
-              | expression EQUALS expression
-              | expression NE expression
+    condition : bool_expression
+              | bool_expression OR condition
+              | bool_expression AND condition
+              | NOT condition
     '''
     if len(p) == 2:
-        p[0] = (p[1] == 'true')
-    else:
-        p[0] = (p[2], p[1], p[3])
+        p[0] = p[1]
+    if len(p) == 3:
+        p[0] = (reserved[p[1]], p[2])
+    if len(p) == 4:
+        p[0] = (reserved[p[2]], p[1], p[3])
+
+
+def p_condition_true_false(p):
+    '''
+    condition : TRUE
+              | FALSE
+    '''
+    p[0] = (p[1] == 'true')
+
+
+def p_bool_expression(p):
+    '''
+    bool_expression : expression GT expression
+                    | expression LT expression
+                    | expression GTE expression
+                    | expression LTE expression
+                    | expression EQ expression
+                    | expression NE expression
+    '''
+    p[0] = (p[2], p[1], p[3])
 
 
 def p_word(p):
     '''
-    word : QUOTE STRING QUOTE
+    word : STRING
     '''
-    p[0] = p[2]
+    p[0] = p[1].replace('"', '')
 
 
 def p_name(p):
     '''
-    name : COLON STRING
+    name : COLON ID
     '''
     p[0] = p[2]
 
@@ -341,155 +368,12 @@ def p_error(p):
 
 
 symbol_table = {}
-
-
-def run(program):
-    for statement in program:
-        execute(statement)
-
-
-def execute(s):
-    global symbol_table
-    function = s[0]
-    arg1 = s[1]
-    arg2 = s[2] if len(s) > 2 else None
-    arg3 = s[3] if len(s) > 3 else None
-
-    # Funções da tartaruga
-    if function == 'SETXY':
-        return calc(arg1), calc(arg2)
-    elif function == 'FORWARD':
-        return calc(arg1)
-    elif function == 'BACKWARD':
-        return calc(arg1)
-    elif function == 'RIGHT':
-        return calc(arg1)
-    elif function == 'LEFT':
-        return calc(arg1)
-    elif function == 'HEADING':
-        print('HEADING')
-    elif function == 'PENUP':
-        print('PENUP')
-    elif function == 'PENDOWN':
-        print('PENDOWN')
-    elif function == 'HOME':
-        print('HOME')
-    elif function == 'WIPECLEAN':
-        print('WIPECLEAN')
-    elif function == 'RESET':
-        print('RESET')
-    elif function == 'XCOR':
-        print('XCOR')
-    elif function == 'YCOR':
-        print('YCOR')
-    elif function == 'TYPEIN':
-        print('TYPEIN')
-        return calc(arg1)
-
-    # Estruturas de controle
-    elif function == 'IF':
-        if eval(arg1):
-            run(arg2)
-
-    elif function == 'IFELSE':
-        if eval(arg1):
-            run(arg2)
-        else:
-            run(arg3)
-
-    elif function == 'WHILE':
-        while eval(arg1):
-            run(arg2)
-
-    elif function == 'MAKE':
-        symbol_table[arg1] = calc(arg3)
-
-    elif function == 'DEF':
-        symbol_table[arg1] = {
-            'args': [a for a in arg2 if a is not None],
-            'body': arg3
-        }
-    elif function == 'CALL':
-        try:
-            procedure = symbol_table[arg1]
-            arg2 = [a for a in arg2 if a is not None]
-            if type(procedure) != dict:
-                print(f"{arg1} is not a procedure")
-                return
-            if len(arg2) != len(procedure['args']):
-                print(f"expected {len(procedure['args'])} arguments, but got {len(arg2)}")
-                return
-            old_symbol_table = symbol_table.copy()
-            for arg, arg_expr in zip(procedure['args'], arg2):
-                symbol_table[arg] = calc(arg_expr)
-            run(procedure['body'])
-            symbol_table = old_symbol_table.copy()
-        except LookupError:
-            print(f"Undeclared procedure {arg1}")
-    # Funções de print
-    elif function == 'PRINT_WORD':
-        print(arg1)
-    elif function == 'PRINT_EXPR':
-        print(calc(arg1))
-
-
-def calc(e):
-    global symbol_table
-    if type(e) == tuple:
-        id = e[0]
-        arg1 = e[1]
-        arg2 = e[2] if len(e) > 2 else None
-        if id == '+':
-            return calc(arg1) + calc(arg2)
-        elif id == '-':
-            return calc(arg1) - calc(arg2)
-        elif id == '*':
-            return calc(arg1) * calc(arg2)
-        elif id == '/':
-            return calc(arg1) / calc(arg2)
-        elif id == '^':
-            return calc(arg1) ** calc(arg2)
-        elif id == 'VAR':
-            try:
-                return symbol_table[arg1]
-            except LookupError:
-                print(f"Undefined variable {arg1}")
-                return
-        elif id == 'UMINUS':
-            return (-1) * calc(arg1)
-        elif id == 'RANDOM':
-            return random.randrange(calc(arg1))
-    else:
-        return e
-
-
-def eval(c):
-    global symbol_table
-    if type(c) != tuple:
-        return c
-    else:
-        op = c[0]
-        arg1 = calc(c[1])
-        arg2 = calc(c[2])
-        if op == '>':
-            return arg1 > arg2
-        elif op == '<':
-            return arg1 < arg2
-        elif op == '>=':
-            return arg1 >= arg2
-        elif op == '<=':
-            return arg1 <= arg2
-        elif op == '=':
-            return arg1 == arg2
-        elif op == '!=':
-            return arg1 != arg2
-
-
 lexer = lex.lex()
 parser = yacc.yacc()
 
 
 def main():
+    global symbol_table
     while True:
         try:
             cmd = input(f'input > ')
@@ -508,15 +392,10 @@ def main():
         s = '\n'.join(lines)
 
         p = parser.parse(s)
-
         if p is None:
             pass
         else:
-            #lexer.input(s)
-            #tokens = [(tok.type, tok.value) for tok in lexer]
-            #print('tokens          : ', tokens)
-            print('AST             : ', p)
-            #print('Symbol table    : ', symbol_table)
+            print('AST             :', p)
             continue
 
 
