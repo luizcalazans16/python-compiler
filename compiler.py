@@ -434,12 +434,8 @@ def main():
     if p is None:
         pass
     else:
-        with open("new_program.logo", "w") as write_file:
-            for line in program:
-                print(line)
-                write_file.write(line)
-                write_file.write("\n")
-
+        for line in program:
+            print(line)
 
 if __name__ == '__main__':
     main()
