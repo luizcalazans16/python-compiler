@@ -2,59 +2,10 @@
 import ply.yacc as yacc
 import ply.lex as lex
 from collections.abc import Iterable
-
+from model.reserved_words import reserved
+from model.tokens import tokens as tokens_model
 program = []
-# Palavras reservadas
-reserved = {
-    'if': 'IF',
-    'else': 'ELSE',
-    'while': 'WHILE',
-    'true': 'TRUE',
-    'false': 'FALSE',
-    'write': 'WRITE',
-    'to': 'TO',
-    'end': 'END',
-    'fo': 'FORWARD',
-    'forward': 'FORWARD',
-    'bk': 'BACKWARD',
-    'back': 'BACKWARD',
-    'rt': 'RIGHT',
-    'right': 'RIGHT',
-    'lt': 'LEFT',
-    'left': 'LEFT',
-    'pu': 'PENUP',
-    'penup': 'PENUP',
-    'pd': 'PENDOWN',
-    'pendown': 'PENDOWN',
-    'heading': 'HEADING',
-    'setxy': 'SETXY',
-    'home': 'HOME',
-    'wipeclean': 'WIPECLEAN',
-    'wc': 'WIPECLEAN',
-    'cs': 'RESET',
-    'clearscreen': 'RESET',
-    'random': 'RANDOM',
-    'xcor': 'XCOR',
-    'ycor': 'YCOR',
-    'typein': 'TYPEIN',
-    'sqrt': 'SQRT',
-    'and': 'AND',
-    'or': 'OR',
-    'not': 'NOT',
-    'then': 'THEN'
-}
-
-# Tokens
-tokens = [
-    'ID', 'FLOAT', 'INT', 'STRING',
-    'LPAR', 'RPAR', 'LK', 'RK',
-    'COLON', 'COMMA',
-    'PLUS', 'MINUS', 'TIMES', 'DIVIDE', 'POWER', 'ASSIGN',
-    'EQ', 'GTE', 'LTE', 'GT', 'LT', 'NE'
-] + list(set(reserved.values()))
-
-
-# Caractéres respectivos aos Tokens
+tokens = tokens_model + list(set(reserved.values()))
 
 t_LPAR = r'\('
 t_LK = r'{'
@@ -75,10 +26,12 @@ t_GT = r'>'
 t_LT = r'<'
 t_NE = r'!='
 
+
 @lex.TOKEN(r'[a-zA-Z_][a-zA-Z0-9_]*')
 def t_ID(t):
     t.type = reserved.get(t.value, 'ID')
     return t
+
 
 @lex.TOKEN(r'\".*\"')
 def t_STRING(t):
@@ -90,6 +43,7 @@ def t_STRING(t):
 def t_FLOAT(t):
     t.value = float(t.value)
     return t
+
 
 @lex.TOKEN(r'\d+')
 def t_INT(t):
