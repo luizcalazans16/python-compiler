@@ -1,0 +1,10 @@
+if (1 < 2 and 2 > 1)
+  then
+    b = 3
+    a = :b ^ 2
+    c = 4 * (:a + :b)
+    write :c "\n"
+    square :a, :c
+else
+  write "Precondition failed"
+end
